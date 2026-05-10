@@ -1,5 +1,7 @@
 import asyncio
+import logging
 import os
+import traceback
 from typing import Dict, List
 from urllib.parse import urlparse
 
@@ -11,6 +13,8 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from yolo3 import DEFAULT_OUTPUT_DIR, run_pipeline
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
@@ -93,10 +97,10 @@ async def run_extraction(payload: RunRequest):
     async with run_lock:
         try:
             await run_in_threadpool(run_pipeline, target_url)
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
         except Exception as exc:
-            raise HTTPException(status_code=500, detail="Pipeline failed.") from exc
+            tb = traceback.format_exc()
+            logging.error("Pipeline error:\n%s", tb)
+            raise HTTPException(status_code=500, detail=str(exc) or repr(exc)) from exc
 
     images = collect_output_images()
     return {
