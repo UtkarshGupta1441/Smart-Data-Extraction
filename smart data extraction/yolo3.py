@@ -109,22 +109,21 @@ def process_image(image_path, output_base_dir=DEFAULT_OUTPUT_DIR):
     print(f"Processed image saved to: {annotated_path}")
 
 def process_folder(folder_path, output_base_dir=DEFAULT_OUTPUT_DIR):
+    """Process images from flat layout or one folder per screenshot (screenshot_N/…)."""
     supported_exts = (".png", ".jpg", ".jpeg", ".bmp", ".tiff")
-    for filename in os.listdir(folder_path):
-        if filename.lower().endswith(supported_exts):
-            image_path = os.path.join(folder_path, filename)
+    for entry in sorted(os.listdir(folder_path)):
+        full = os.path.join(folder_path, entry)
+        if os.path.isdir(full):
+            for filename in sorted(os.listdir(full)):
+                if not filename.lower().endswith(supported_exts):
+                    continue
+                image_path = os.path.join(full, filename)
+                print(f"Processing: {image_path}")
+                process_image(image_path, output_base_dir)
+        elif entry.lower().endswith(supported_exts):
+            image_path = full
             print(f"Processing: {image_path}")
             process_image(image_path, output_base_dir)
-
-def clear_screenshot_folder(folder_path):
-    supported_exts = (".png", ".jpg", ".jpeg", ".bmp", ".tiff")
-    for filename in os.listdir(folder_path):
-        if filename.lower().endswith(supported_exts):
-            file_path = os.path.join(folder_path, filename)
-            try:
-                os.remove(file_path)
-            except OSError as e:
-                print(f"Warning: could not remove old screenshot {file_path}: {e}")
 
 def _remove_readonly(func, path, exc_info):
     try:
@@ -132,6 +131,20 @@ def _remove_readonly(func, path, exc_info):
         func(path)
     except Exception:
         pass
+
+def clear_screenshot_folder(folder_path):
+    """Remove prior run artifacts: per-screenshot subfolders and any loose images."""
+    if not os.path.isdir(folder_path):
+        return
+    for entry in os.listdir(folder_path):
+        full = os.path.join(folder_path, entry)
+        try:
+            if os.path.isdir(full):
+                shutil.rmtree(full, onerror=_remove_readonly)
+            else:
+                os.remove(full)
+        except OSError as e:
+            print(f"Warning: could not remove old path {full}: {e}")
 
 def clear_output2_folder(folder_path=DEFAULT_OUTPUT_DIR, retries=3, retry_delay=0.35):
     folder_path = resolve_path(folder_path)
@@ -330,7 +343,11 @@ async def take_smart_screenshots(url, output_dir=DEFAULT_SCREENSHOT_DIR, max_scr
                 )
 
                 if should_capture:
-                    screenshot_path = os.path.join(output_dir, f"screenshot_{screenshot_count + 1}.png")
+                    n = screenshot_count + 1
+                    shot_name = f"screenshot_{n}"
+                    shot_dir = os.path.join(output_dir, shot_name)
+                    os.makedirs(shot_dir, exist_ok=True)
+                    screenshot_path = os.path.join(shot_dir, f"{shot_name}.png")
                     await page.screenshot(path=screenshot_path, full_page=False)
                     print(f"Saved: {screenshot_path}")
                     screenshot_count += 1
